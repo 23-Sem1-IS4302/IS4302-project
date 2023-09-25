@@ -1,0 +1,16 @@
+{
+  "name": "is4302-project",
+  "version": "1.0.0",
+  "description": "IS4302 Project",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "3.0.0",
+    "hardhat": "2.17.3"
+  }
+}
