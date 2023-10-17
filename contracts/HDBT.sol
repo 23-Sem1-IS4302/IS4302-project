@@ -38,6 +38,7 @@ contract HDBT is ERC1155, Ownable, Pausable {
     }
 
     // TODO add AccessControl here later
+    // TODO missing HDB details (eg, postal code, address)
     function mint() public payable whenNotPaused enoughDeposit {
         tokenId++;
         pendingMapping[tokenId] = msg.sender;
@@ -58,6 +59,7 @@ contract HDBT is ERC1155, Ownable, Pausable {
         pendings.pop();
     }
 
+    // TODO change `onlyOwner` to `onlyAdmin`
     function approveMint(
         uint256 pendingTokenId
     ) public whenNotPaused onlyOwner {
@@ -70,5 +72,8 @@ contract HDBT is ERC1155, Ownable, Pausable {
     }
 
     // TODO reject the mint
+    // Keep the deposit, remove the tokenID from the pending mapping
+    //
     // TODO user should be able to view all IDs and shares they hold given an address input
+    // TODO a method to check whether the ID is allowed to be splitted or not (just a modifier)
 }
