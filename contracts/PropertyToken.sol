@@ -12,7 +12,8 @@ contract PropertyToken is ERC1155, Ownable {
     uint256 tokenId;
 
     struct propertyDetail {
-        address user;
+        address[] propertyOwners;
+        uint16[] shares;
         string postalCode;
         string propertyAddress;
     }
@@ -20,11 +21,12 @@ contract PropertyToken is ERC1155, Ownable {
     mapping(uint256 => bool) propertyFractionized;
 
     function registerNewProperty(
-        address user,
         string memory postalCode,
-        string memory propertyAddress
+        string memory propertyAddress,
+        address[] memory propertyOwners,
+        uint16[] memory shares
     ) public onlyOwner returns (uint256) {
-        propertyDetail memory newProperty = propertyDetail(user, postalCode, propertyAddress);
+        propertyDetail memory newProperty = propertyDetail(propertyOwners, shares, postalCode, propertyAddress);
         properties[tokenId] = newProperty;
 
         tokenId++;
@@ -33,7 +35,10 @@ contract PropertyToken is ERC1155, Ownable {
 
     function mintPropertyToken(uint256 pendingPropertyId) public onlyOwner {
         propertyDetail memory toMintProperty = properties[pendingPropertyId];
-        _mint(toMintProperty.user, pendingPropertyId, 1000, "");
+
+        for (uint16 i = 0; i < toMintProperty.propertyOwners.length; i++) {
+            _mint(toMintProperty.propertyOwners[i], pendingPropertyId, toMintProperty.shares[i], "");
+        }
     }
 
     function viewProperty(uint256 propertyId) public view returns (propertyDetail memory) {
