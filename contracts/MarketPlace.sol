@@ -4,17 +4,22 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./User.sol";
 import "./PropertyToken.sol";
-import "hardhat/console.sol";
 
 // challenges faced
 // 1. (Done) Each object has many logics inside, making integration with different object very difficult, eg, too many depencies among different smart contracts
 // 2. (Done) How can I make sure important function mint is only called by another specific contract?
 // Ans: Set object contracts' owner to Marketplace and make it the only entry point
+
 // 3. (Suggestion but not implemented) Soulbound token to manage user and admin access to the marketplace? If not enough time, can talk in the future development
 // Basically 2 NFTs are needed, one for the admin, the other one for the approved user
+
 // 4. How to mint a property token that is co-shared?
-// 5. How to track all tokens that belonged to a user. (extend `safeTransferFrom` and `safeBatchTransferFrom`)
-// 6. Given a propertyId, list all addresses and their shares.
+// It turns out ERC1155's mint function to the same token ID can be called multiple times
+// So the total balance of total is not fixed when calling the _mint() function
+
+// TODO 5. How to track all tokens that belonged to a user. (extend `safeTransferFrom` and `safeBatchTransferFrom`)
+
+// TODO 6. Given a propertyId, list all addresses and their shares.
 
 contract Marketplace is Ownable {
     constructor(address userContractAddr, address propertyTokenAddr) Ownable(msg.sender) {
@@ -34,13 +39,8 @@ contract Marketplace is Ownable {
     event ApproveUser(address indexed adminAddr, address indexed userAddr);
     event RejectUser(address indexed adminAddr, address indexed userAddr, string reason);
     event RegisterNewProperty(address indexed userAddr, uint256 indexed propertyId);
-    event ApproveProperty(address indexed adminAddr, address indexed userAddr, uint256 indexed propertyId);
-    event RejectProperty(
-        address indexed adminAddr,
-        address indexed userAddr,
-        uint256 indexed propertyId,
-        string reason
-    );
+    event ApproveProperty(address indexed adminAddr, uint256 indexed propertyId);
+    event RejectProperty(address indexed adminAddr, uint256 indexed propertyId, string reason);
 
     // Admin/User management
     // TODO some mechanism to make sure newly added admin is not user, or not needed
@@ -66,6 +66,20 @@ contract Marketplace is Ownable {
 
     modifier havePendingProperties() {
         require(_pendingPropertyIds.length != 0, "No pending properties to approve or reject");
+        _;
+    }
+
+    modifier validOwnersShares(address[] memory propertyOwners, uint16[] memory shares) {
+        require(propertyOwners.length == shares.length, "Owners and shares length do not match");
+        // TODO Do we need a limit? Cause if there are more than 1000 owners, then totalShares is also more than 1000
+        require(propertyOwners.length <= 1000, "At most 1000 owners allowed");
+
+        uint16 totalShares = 0;
+        for (uint16 i = 0; i < propertyOwners.length; i++) {
+            require(approvedUsers[propertyOwners[i]], "Some users are not approved");
+            totalShares += shares[i];
+        }
+        require(totalShares == 1000, "Shares sum is not 1000");
         _;
     }
 
@@ -143,8 +157,18 @@ contract Marketplace is Ownable {
     // function viewRegistrationDetails() public view {}
 
     // Housing management
-    function registerNewProperty(string memory postalCode, string memory propertyAddress) public onlyApprovedUser {
-        uint256 pendingTokenId = propertyTokenContract.registerNewProperty(msg.sender, postalCode, propertyAddress);
+    function registerNewProperty(
+        string memory postalCode,
+        string memory propertyAddress,
+        address[] memory propertyOwners,
+        uint16[] memory shares
+    ) public onlyApprovedUser validOwnersShares(propertyOwners, shares) {
+        uint256 pendingTokenId = propertyTokenContract.registerNewProperty(
+            postalCode,
+            propertyAddress,
+            propertyOwners,
+            shares
+        );
 
         _pendingPropertyIds.push(pendingTokenId);
         emit RegisterNewProperty(msg.sender, pendingTokenId);
@@ -170,15 +194,13 @@ contract Marketplace is Ownable {
 
     function approveProperty(uint256 pendingPropertyId) public onlyAdmin havePendingProperties {
         _removePendingProperty(pendingPropertyId);
-        address userAddr = propertyTokenContract.viewProperty(pendingPropertyId).user;
         propertyTokenContract.mintPropertyToken(pendingPropertyId);
-        emit ApproveProperty(msg.sender, userAddr, pendingPropertyId);
+        emit ApproveProperty(msg.sender, pendingPropertyId);
     }
 
     function rejectProperty(uint256 pendingPropertyId, string memory reason) public onlyAdmin havePendingProperties {
         _removePendingProperty(pendingPropertyId);
-        address userAddr = propertyTokenContract.viewProperty(pendingPropertyId).user;
-        emit RejectProperty(msg.sender, userAddr, pendingPropertyId, reason);
+        emit RejectProperty(msg.sender, pendingPropertyId, reason);
     }
 
     function viewProperty(uint256 propertyId) public view returns (PropertyToken.propertyDetail memory) {
