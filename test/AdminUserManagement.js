@@ -4,7 +4,7 @@ const {
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("AdminUserManagement", () => {
+describe("Admin and User Management", () => {
   async function deployFixture() {
     // Contracts are deployed using the first signer/account by default
     const [
