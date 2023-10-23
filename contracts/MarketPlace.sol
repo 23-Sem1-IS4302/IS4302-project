@@ -13,13 +13,17 @@ import "./PropertyToken.sol";
 // 3. (Suggestion but not implemented) Soulbound token to manage user and admin access to the marketplace? If not enough time, can talk in the future development
 // Basically 2 NFTs are needed, one for the admin, the other one for the approved user
 
-// 4. How to mint a property token that is co-shared?
+// 4. (Done) How to mint a property token that is co-shared?
 // It turns out ERC1155's mint function to the same token ID can be called multiple times
 // So the total balance of total is not fixed when calling the _mint() function
 
 // TODO 5. How to track all tokens that belonged to a user. (extend `safeTransferFrom` and `safeBatchTransferFrom`)
 
-// TODO 6. Given a propertyId, list all addresses and their shares.
+// 6. (Done) Given a propertyId, list all addresses and their shares.
+
+// 7. (Done) Member "push" is not available in address[] memory outside of storage. So a array in struct cannot be modified once declared
+
+// 8. (Done) Dynamic arrays cannot be returned, it has to be memory type
 
 contract Marketplace is Ownable {
     constructor(address userContractAddr, address propertyTokenAddr) Ownable(msg.sender) {
@@ -69,13 +73,13 @@ contract Marketplace is Ownable {
         _;
     }
 
-    modifier validOwnersShares(address[] memory propertyOwners, uint16[] memory shares) {
+    modifier validOwnersShares(address[] memory propertyOwners, uint256[] memory shares) {
         require(propertyOwners.length == shares.length, "Owners and shares length do not match");
         // TODO Do we need a limit? Cause if there are more than 1000 owners, then totalShares is also more than 1000
         require(propertyOwners.length <= 1000, "At most 1000 owners allowed");
 
-        uint16 totalShares = 0;
-        for (uint16 i = 0; i < propertyOwners.length; i++) {
+        uint256 totalShares = 0;
+        for (uint256 i = 0; i < propertyOwners.length; i++) {
             require(approvedUsers[propertyOwners[i]], "Some users are not approved");
             totalShares += shares[i];
         }
@@ -161,7 +165,7 @@ contract Marketplace is Ownable {
         string memory postalCode,
         string memory propertyAddress,
         address[] memory propertyOwners,
-        uint16[] memory shares
+        uint256[] memory shares
     ) public onlyApprovedUser validOwnersShares(propertyOwners, shares) {
         uint256 pendingTokenId = propertyTokenContract.registerNewProperty(
             postalCode,

@@ -4,7 +4,45 @@ const {
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("AdminUserManagement", () => {
+/**
+ * This function verifies owners and shares of a property
+ * The supplied expectedOwners and expectedShares must match at the same index
+ * e.g. If address1 owns 400 and address2 owns 600
+ * expectedOwners can be [address1, address2] and expectedShares can be [400, 600]
+ * or
+ * expectedOwners can be [address2, address1] and expectedShares can be [600, 400]
+ *
+ * This is not allowed
+ * expectedOwners can be [address2, address1] and expectedShares can be [400, 600]
+ * as address2 does not own 400, it owns 600
+ *
+ * @param {string[]} owners: addresses in the response from viewProperty()
+ * @param {BigInt[]} shares: shares in the response from viewProperty()
+ * @param {string[]} expectedOwners: expected addresses
+ * @param {int[]} expectedShares: expected shares in **int** array
+ */
+function verifyPropertyOwnersShares(
+  owners,
+  shares,
+  expectedOwners,
+  expectedShares,
+) {
+  const expectedSharesBigInt = expectedShares.map((item) => BigInt(item));
+  expect(owners).to.include.members(expectedOwners);
+  expect(owners.length).to.equal(expectedOwners.length);
+  expect(shares).to.include.members(expectedSharesBigInt);
+  expect(shares.length).to.equal(shares.length);
+
+  for (let index = 0; index < expectedOwners.length; index++) {
+    const expectedOwner = expectedOwners[index];
+    const expectedShare = expectedShares[index];
+
+    const indexExpectedOwner = owners.indexOf(expectedOwner);
+    expect(shares[indexExpectedOwner]).to.equal(expectedShare);
+  }
+}
+
+describe("Property Management", () => {
   const PROPERTY_ID_0 = 0;
   const PROPERTY_ID_1 = 1;
   const PROPERTY_ID_2 = 2;
@@ -324,11 +362,176 @@ describe("AdminUserManagement", () => {
     });
   });
 
-  describe("View all property given an address", () => {
-    //
-  });
-
   describe("View all addresses and shares given a propertyId", () => {
-    //
+    it("should have correct owners and shares after approval", async () => {
+      const { marketplace, admin1, user1, user2, user3 } =
+        await loadFixture(deployFixture);
+
+      await marketplace
+        .connect(user1)
+        .registerNewProperty(
+          "573821",
+          "123 Main Street, Los Angeles, CA",
+          [user1.address, user2.address, user3.address],
+          [250, 350, 400],
+        );
+      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+
+      const [dummy1, dummy2, propertyOwners, shares] =
+        await marketplace.viewProperty(PROPERTY_ID_0);
+      const expectedOwners = [user1.address, user2.address, user3.address];
+      const expectedShares = [250, 350, 400];
+
+      verifyPropertyOwnersShares(
+        propertyOwners,
+        shares,
+        expectedOwners,
+        expectedShares,
+      );
+    });
+
+    it("should show the new owner after the transfer", async () => {
+      const { marketplace, propertyToken, admin1, user1, user2, user3 } =
+        await loadFixture(deployFixture);
+
+      await marketplace
+        .connect(user1)
+        .registerNewProperty(
+          "573821",
+          "123 Main Street, Los Angeles, CA",
+          [user1.address, user2.address],
+          [300, 700],
+        );
+      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await propertyToken
+        .connect(user2)
+        .safeTransferFrom(
+          user2.address,
+          user3.address,
+          PROPERTY_ID_0,
+          300,
+          "0x",
+        );
+
+      const [dummy1, dummy2, propertyOwners, shares] =
+        await marketplace.viewProperty(PROPERTY_ID_0);
+      const expectedOwners = [user1.address, user2.address, user3.address];
+      const expectedShares = [300, 400, 300];
+
+      verifyPropertyOwnersShares(
+        propertyOwners,
+        shares,
+        expectedOwners,
+        expectedShares,
+      );
+    });
+
+    it("should remove owner after transfer all shares", async () => {
+      const { marketplace, propertyToken, admin1, user1, user2, user3 } =
+        await loadFixture(deployFixture);
+
+      await marketplace
+        .connect(user1)
+        .registerNewProperty(
+          "573821",
+          "123 Main Street, Los Angeles, CA",
+          [user1.address, user2.address],
+          [300, 700],
+        );
+      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await propertyToken
+        .connect(user2)
+        .safeTransferFrom(
+          user2.address,
+          user3.address,
+          PROPERTY_ID_0,
+          700,
+          "0x",
+        );
+
+      const [dummy1, dummy2, propertyOwners, shares] =
+        await marketplace.viewProperty(PROPERTY_ID_0);
+      const expectedOwners = [user1.address, user3.address];
+      const expectedShares = [300, 700];
+      verifyPropertyOwnersShares(
+        propertyOwners,
+        shares,
+        expectedOwners,
+        expectedShares,
+      );
+
+      await propertyToken
+        .connect(user1)
+        .safeTransferFrom(
+          user1.address,
+          user3.address,
+          PROPERTY_ID_0,
+          300,
+          "0x",
+        );
+      const [dummy11, dummy12, propertyOwners1, shares1] =
+        await marketplace.viewProperty(PROPERTY_ID_0);
+      const expectedOwners1 = [user3.address];
+      const expectedShares1 = [1000];
+
+      verifyPropertyOwnersShares(
+        propertyOwners1,
+        shares1,
+        expectedOwners1,
+        expectedShares1,
+      );
+    });
+
+    it("should revert if owner starting the transfer not found in the property", async () => {
+      const { marketplace, propertyToken, admin1, user1, user2, user3 } =
+        await loadFixture(deployFixture);
+
+      await marketplace
+        .connect(user1)
+        .registerNewProperty(
+          "573821",
+          "123 Main Street, Los Angeles, CA",
+          [user1.address, user2.address],
+          [300, 700],
+        );
+      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await expect(
+        propertyToken
+          .connect(user2)
+          .safeTransferFrom(
+            user3.address,
+            user2.address,
+            PROPERTY_ID_0,
+            700,
+            "0x",
+          ),
+      ).to.be.revertedWith("from is not an owner");
+    });
+
+    it("should revert if transfer invalid shares", async () => {
+      const { marketplace, propertyToken, admin1, user1, user2, user3 } =
+        await loadFixture(deployFixture);
+
+      await marketplace
+        .connect(user1)
+        .registerNewProperty(
+          "573821",
+          "123 Main Street, Los Angeles, CA",
+          [user1.address, user2.address],
+          [300, 700],
+        );
+      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await expect(
+        propertyToken
+          .connect(user2)
+          .safeTransferFrom(
+            user2.address,
+            user3.address,
+            PROPERTY_ID_0,
+            701,
+            "0x",
+          ),
+      ).to.be.revertedWithPanic();
+    });
   });
 });
