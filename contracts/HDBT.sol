@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract HDBT is ERC1155, Ownable, Pausable {
-    uint256 tokenId;
+    uint256 public tokenId;
     uint256 public constant DEPOSIT = 2 ether;
 
     uint256[] pendings;
