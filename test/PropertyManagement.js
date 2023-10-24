@@ -58,19 +58,10 @@ describe("Property Management", () => {
     const userContractAddr = await userContract.getAddress();
 
     const PropertyToken = await ethers.getContractFactory("PropertyToken");
-    const propertyToken = await PropertyToken.connect(owner).deploy();
-    const propertyTokenAddr = await propertyToken.getAddress();
+    const propertyToken =
+      await PropertyToken.connect(owner).deploy(userContractAddr);
 
-    const Marketplace = await ethers.getContractFactory("Marketplace");
-    const marketplace = await Marketplace.connect(owner).deploy(
-      userContractAddr,
-      propertyTokenAddr,
-    );
-    const marketplaceAddr = await marketplace.getAddress();
-
-    await userContract.connect(owner).transferOwnership(marketplaceAddr);
-    await propertyToken.connect(owner).transferOwnership(marketplaceAddr);
-    await marketplace
+    await userContract
       .connect(owner)
       .addNewAdmin(
         admin1.address,
@@ -81,7 +72,7 @@ describe("Property Management", () => {
         "123 Main Street, Los Angeles, CA",
       );
 
-    await marketplace
+    await userContract
       .connect(user1)
       .registerNewUser(
         "Sophie",
@@ -90,8 +81,8 @@ describe("Property Management", () => {
         "789-01-2345",
         "456 Oak Lane, London, UK",
       );
-    await marketplace.connect(admin1).approveUser(user1.address);
-    await marketplace
+    await userContract.connect(admin1).approveUser(user1.address);
+    await userContract
       .connect(user2)
       .registerNewUser(
         "Muhammad",
@@ -100,9 +91,9 @@ describe("Property Management", () => {
         "567-89-0123",
         "321 Cedar Road, Dhaka, Bangladesh",
       );
-    await marketplace.connect(admin1).approveUser(user2.address);
+    await userContract.connect(admin1).approveUser(user2.address);
 
-    await marketplace
+    await userContract
       .connect(user3)
       .registerNewUser(
         "Elena",
@@ -111,10 +102,9 @@ describe("Property Management", () => {
         "234-56-7890",
         "987 Birch Street, Moscow, Russia",
       );
-    await marketplace.connect(admin1).approveUser(user3.address);
+    await userContract.connect(admin1).approveUser(user3.address);
 
     return {
-      marketplace,
       userContract,
       propertyToken,
       owner,
@@ -128,11 +118,10 @@ describe("Property Management", () => {
 
   describe("Property Approval Rejection", () => {
     it("should approve a registered property", async () => {
-      const { marketplace, propertyToken, admin1, user1 } =
-        await loadFixture(deployFixture);
+      const { propertyToken, admin1, user1 } = await loadFixture(deployFixture);
 
       expect(
-        await marketplace
+        await propertyToken
           .connect(user1)
           .registerNewProperty(
             "573821",
@@ -141,19 +130,19 @@ describe("Property Management", () => {
             [ONE_THOUSAND_SHARES],
           ),
       )
-        .to.emit(marketplace, "RegisterNewProperty")
+        .to.emit(propertyToken, "RegisterNewProperty")
         .withArgs(user1.address, PROPERTY_ID_0);
 
       expect(
-        await marketplace.connect(admin1).viewPendingProperties(),
+        await propertyToken.connect(admin1).viewPendingProperties(),
       ).to.deep.equal([PROPERTY_ID_0]);
 
-      expect(await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0))
-        .to.emit(marketplace, "ApproveProperty")
+      expect(await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_0))
+        .to.emit(propertyToken, "ApproveProperty")
         .withArgs(admin1.address, PROPERTY_ID_0);
 
       expect(
-        await marketplace.connect(admin1).viewPendingProperties(),
+        await propertyToken.connect(admin1).viewPendingProperties(),
       ).to.deep.equal([]);
 
       expect(
@@ -161,11 +150,37 @@ describe("Property Management", () => {
       ).to.equal(ONE_THOUSAND_SHARES);
     });
 
-    it("should approve any property in pending properties", async () => {
-      const { marketplace, propertyToken, admin1, user1 } =
-        await loadFixture(deployFixture);
+    it("should returns propertyId as valid only after approval", async () => {
+      const { propertyToken, admin1, user1 } = await loadFixture(deployFixture);
 
-      await marketplace
+      expect(
+        await propertyToken
+          .connect(user1)
+          .registerNewProperty(
+            "573821",
+            "123 Main Street, Los Angeles, CA",
+            [user1.address],
+            [ONE_THOUSAND_SHARES],
+          ),
+      )
+        .to.emit(propertyToken, "RegisterNewProperty")
+        .withArgs(user1.address, PROPERTY_ID_0);
+
+      expect(await propertyToken.isPropertyIdValid(PROPERTY_ID_0)).to.equal(
+        false,
+      );
+
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_0);
+
+      expect(await propertyToken.isPropertyIdValid(PROPERTY_ID_0)).to.equal(
+        true,
+      );
+    });
+
+    it("should approve any property in pending properties", async () => {
+      const { propertyToken, admin1, user1 } = await loadFixture(deployFixture);
+
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -173,7 +188,7 @@ describe("Property Management", () => {
           [user1.address],
           [ONE_THOUSAND_SHARES],
         );
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "892467",
@@ -181,7 +196,7 @@ describe("Property Management", () => {
           [user1.address],
           [ONE_THOUSAND_SHARES],
         );
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "315749",
@@ -190,12 +205,12 @@ describe("Property Management", () => {
           [ONE_THOUSAND_SHARES],
         );
       expect(
-        await marketplace.connect(admin1).viewPendingProperties(),
+        await propertyToken.connect(admin1).viewPendingProperties(),
       ).to.deep.equal([PROPERTY_ID_0, PROPERTY_ID_1, PROPERTY_ID_2]);
 
-      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_1);
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_1);
       expect(
-        await marketplace.connect(admin1).viewPendingProperties(),
+        await propertyToken.connect(admin1).viewPendingProperties(),
       ).to.deep.equal([PROPERTY_ID_0, PROPERTY_ID_2]);
       expect(
         await propertyToken.balanceOf(user1.address, PROPERTY_ID_1),
@@ -203,20 +218,20 @@ describe("Property Management", () => {
     });
 
     it("should revert if no property in pending list to approve", async () => {
-      const { marketplace, admin1 } = await loadFixture(deployFixture);
+      const { propertyToken, admin1 } = await loadFixture(deployFixture);
 
       expect(
-        await marketplace.connect(admin1).viewPendingProperties(),
+        await propertyToken.connect(admin1).viewPendingProperties(),
       ).to.deep.equal([]);
       await expect(
-        marketplace.connect(admin1).approveProperty(PROPERTY_ID_1),
+        propertyToken.connect(admin1).approveProperty(PROPERTY_ID_1),
       ).to.be.revertedWith("No pending properties to approve or reject");
     });
 
     it("should revert if property not found in pending list to approve", async () => {
-      const { marketplace, admin1, user1 } = await loadFixture(deployFixture);
+      const { propertyToken, admin1, user1 } = await loadFixture(deployFixture);
 
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -225,21 +240,20 @@ describe("Property Management", () => {
           [ONE_THOUSAND_SHARES],
         );
       expect(
-        await marketplace.connect(admin1).viewPendingProperties(),
+        await propertyToken.connect(admin1).viewPendingProperties(),
       ).to.deep.equal([PROPERTY_ID_0]);
 
       await expect(
-        marketplace.connect(admin1).approveProperty(PROPERTY_ID_2),
+        propertyToken.connect(admin1).approveProperty(PROPERTY_ID_2),
       ).to.be.revertedWith(
         "Property ID not found in pending list, double check",
       );
     });
 
     it("should reject a property and allow register again to get approved", async () => {
-      const { marketplace, propertyToken, admin1, user1 } =
-        await loadFixture(deployFixture);
+      const { propertyToken, admin1, user1 } = await loadFixture(deployFixture);
 
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -248,18 +262,18 @@ describe("Property Management", () => {
           [ONE_THOUSAND_SHARES],
         );
       expect(
-        await marketplace.connect(admin1).viewPendingProperties(),
+        await propertyToken.connect(admin1).viewPendingProperties(),
       ).to.deep.equal([PROPERTY_ID_0]);
 
       await expect(
-        marketplace
+        propertyToken
           .connect(admin1)
           .rejectProperty(PROPERTY_ID_0, "no fake info"),
       )
-        .to.emit(marketplace, "RejectProperty")
+        .to.emit(propertyToken, "RejectProperty")
         .withArgs(admin1.address, PROPERTY_ID_0, "no fake info");
 
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -268,10 +282,10 @@ describe("Property Management", () => {
           [ONE_THOUSAND_SHARES],
         );
       expect(
-        await marketplace.connect(admin1).viewPendingProperties(),
+        await propertyToken.connect(admin1).viewPendingProperties(),
       ).to.deep.equal([PROPERTY_ID_1]);
-      expect(await marketplace.connect(admin1).approveProperty(PROPERTY_ID_1))
-        .to.emit(marketplace, "ApproveProperty")
+      expect(await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_1))
+        .to.emit(propertyToken, "ApproveProperty")
         .withArgs(admin1.address, PROPERTY_ID_1);
       expect(
         await propertyToken.balanceOf(user1.address, PROPERTY_ID_1),
@@ -279,10 +293,10 @@ describe("Property Management", () => {
     });
 
     it("should mint property to more than 1 owners", async () => {
-      const { marketplace, propertyToken, admin1, user1, user2, user3 } =
+      const { propertyToken, admin1, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -290,7 +304,7 @@ describe("Property Management", () => {
           [user1.address, user2.address, user3.address],
           [300, 300, 400],
         );
-      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_0);
 
       expect(
         await propertyToken.balanceOf(user1.address, PROPERTY_ID_0),
@@ -304,11 +318,11 @@ describe("Property Management", () => {
     });
 
     it("should not register the property if owners and shares size are not equal", async () => {
-      const { marketplace, user1, user2, user3 } =
+      const { propertyToken, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
       await expect(
-        marketplace
+        propertyToken
           .connect(user1)
           .registerNewProperty(
             "573821",
@@ -320,11 +334,11 @@ describe("Property Management", () => {
     });
 
     it("should not register the property if one user is not approved", async () => {
-      const { marketplace, user1, notApprovedUser } =
+      const { propertyToken, user1, notApprovedUser } =
         await loadFixture(deployFixture);
 
       await expect(
-        marketplace
+        propertyToken
           .connect(user1)
           .registerNewProperty(
             "573821",
@@ -336,11 +350,11 @@ describe("Property Management", () => {
     });
 
     it("should not register the property if shares sum is not 1000", async () => {
-      const { marketplace, user1, user2, user3 } =
+      const { propertyToken, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
       await expect(
-        marketplace
+        propertyToken
           .connect(user1)
           .registerNewProperty(
             "573821",
@@ -350,7 +364,7 @@ describe("Property Management", () => {
           ),
       ).to.be.revertedWith("Shares sum is not 1000");
       await expect(
-        marketplace
+        propertyToken
           .connect(user1)
           .registerNewProperty(
             "573821",
@@ -364,10 +378,10 @@ describe("Property Management", () => {
 
   describe("View all addresses and shares given a propertyId", () => {
     it("should have correct owners and shares after approval", async () => {
-      const { marketplace, admin1, user1, user2, user3 } =
+      const { propertyToken, admin1, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -375,10 +389,10 @@ describe("Property Management", () => {
           [user1.address, user2.address, user3.address],
           [250, 350, 400],
         );
-      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_0);
 
       const [dummy1, dummy2, propertyOwners, shares] =
-        await marketplace.viewProperty(PROPERTY_ID_0);
+        await propertyToken.viewProperty(PROPERTY_ID_0);
       const expectedOwners = [user1.address, user2.address, user3.address];
       const expectedShares = [250, 350, 400];
 
@@ -391,10 +405,10 @@ describe("Property Management", () => {
     });
 
     it("should show the new owner after the transfer", async () => {
-      const { marketplace, propertyToken, admin1, user1, user2, user3 } =
+      const { propertyToken, admin1, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -402,7 +416,7 @@ describe("Property Management", () => {
           [user1.address, user2.address],
           [300, 700],
         );
-      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_0);
       await propertyToken
         .connect(user2)
         .safeTransferFrom(
@@ -414,7 +428,7 @@ describe("Property Management", () => {
         );
 
       const [dummy1, dummy2, propertyOwners, shares] =
-        await marketplace.viewProperty(PROPERTY_ID_0);
+        await propertyToken.viewProperty(PROPERTY_ID_0);
       const expectedOwners = [user1.address, user2.address, user3.address];
       const expectedShares = [300, 400, 300];
 
@@ -427,10 +441,10 @@ describe("Property Management", () => {
     });
 
     it("should remove owner after transfer all shares", async () => {
-      const { marketplace, propertyToken, admin1, user1, user2, user3 } =
+      const { propertyToken, admin1, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -438,7 +452,7 @@ describe("Property Management", () => {
           [user1.address, user2.address],
           [300, 700],
         );
-      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_0);
       await propertyToken
         .connect(user2)
         .safeTransferFrom(
@@ -450,7 +464,7 @@ describe("Property Management", () => {
         );
 
       const [dummy1, dummy2, propertyOwners, shares] =
-        await marketplace.viewProperty(PROPERTY_ID_0);
+        await propertyToken.viewProperty(PROPERTY_ID_0);
       const expectedOwners = [user1.address, user3.address];
       const expectedShares = [300, 700];
       verifyPropertyOwnersShares(
@@ -470,7 +484,7 @@ describe("Property Management", () => {
           "0x",
         );
       const [dummy11, dummy12, propertyOwners1, shares1] =
-        await marketplace.viewProperty(PROPERTY_ID_0);
+        await propertyToken.viewProperty(PROPERTY_ID_0);
       const expectedOwners1 = [user3.address];
       const expectedShares1 = [1000];
 
@@ -483,10 +497,10 @@ describe("Property Management", () => {
     });
 
     it("should revert if owner starting the transfer not found in the property", async () => {
-      const { marketplace, propertyToken, admin1, user1, user2, user3 } =
+      const { propertyToken, admin1, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -494,7 +508,7 @@ describe("Property Management", () => {
           [user1.address, user2.address],
           [300, 700],
         );
-      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_0);
       await expect(
         propertyToken
           .connect(user2)
@@ -509,10 +523,10 @@ describe("Property Management", () => {
     });
 
     it("should revert if transfer invalid shares", async () => {
-      const { marketplace, propertyToken, admin1, user1, user2, user3 } =
+      const { propertyToken, admin1, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
-      await marketplace
+      await propertyToken
         .connect(user1)
         .registerNewProperty(
           "573821",
@@ -520,7 +534,7 @@ describe("Property Management", () => {
           [user1.address, user2.address],
           [300, 700],
         );
-      await marketplace.connect(admin1).approveProperty(PROPERTY_ID_0);
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_0);
       await expect(
         propertyToken
           .connect(user2)
