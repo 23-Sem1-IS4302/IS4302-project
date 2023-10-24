@@ -23,7 +23,8 @@ describe("Admin and User Management", () => {
     const userContractAddr = await userContract.getAddress();
 
     const PropertyToken = await ethers.getContractFactory("PropertyToken");
-    const propertyToken = await PropertyToken.connect(owner).deploy();
+    const propertyToken =
+      await PropertyToken.connect(owner).deploy(userContractAddr);
     const propertyTokenAddr = await propertyToken.getAddress();
 
     const Marketplace = await ethers.getContractFactory("Marketplace");
@@ -31,11 +32,8 @@ describe("Admin and User Management", () => {
       userContractAddr,
       propertyTokenAddr,
     );
-    const marketplaceAddr = await marketplace.getAddress();
 
-    await userContract.connect(owner).transferOwnership(marketplaceAddr);
-    await propertyToken.connect(owner).transferOwnership(marketplaceAddr);
-    await marketplace
+    await userContract
       .connect(owner)
       .addNewAdmin(
         admin1.address,
@@ -46,7 +44,7 @@ describe("Admin and User Management", () => {
         "123 Main Street, Los Angeles, CA",
       );
 
-    await marketplace
+    await userContract
       .connect(owner)
       .addNewAdmin(
         admin2.address,
@@ -77,32 +75,19 @@ describe("Admin and User Management", () => {
       const { marketplace, userContract, propertyToken, owner } =
         await loadFixture(deployFixture);
 
-      const marketplaceAddrress = await marketplace.getAddress();
-
       expect(await marketplace.owner()).to.equal(owner.address);
-      expect(await userContract.owner()).to.equal(marketplaceAddrress);
-      expect(await propertyToken.owner()).to.equal(marketplaceAddrress);
-    });
-
-    it("should transfer contracts for migration purpose", async () => {
-      const { marketplace, userContract, propertyToken, owner, newOwner } =
-        await loadFixture(deployFixture);
-
-      await marketplace.connect(owner).transferPropertyTokenOwnership(newOwner);
-      await marketplace.connect(owner).transferUserOwnership(newOwner);
-
-      expect(await userContract.owner()).to.equal(newOwner.address);
-      expect(await propertyToken.owner()).to.equal(newOwner.address);
+      expect(await userContract.owner()).to.equal(owner.address);
+      expect(await propertyToken.owner()).to.equal(owner.address);
     });
   });
 
   describe("Admin management", () => {
     it("should add new admin", async () => {
-      const { marketplace, owner, notAddedAdmin } =
+      const { userContract, owner, notAddedAdmin } =
         await loadFixture(deployFixture);
 
       expect(
-        await marketplace
+        await userContract
           .connect(owner)
           .addNewAdmin(
             notAddedAdmin.address,
@@ -113,14 +98,15 @@ describe("Admin and User Management", () => {
             "123 Main Street, Los Angeles, CA",
           ),
       )
-        .to.emit(marketplace, "AddAdmin")
+        .to.emit(userContract, "AddAdmin")
         .withArgs(owner.address, notAddedAdmin.address);
     });
 
     it("should not add new admin with the same address", async () => {
-      const { marketplace, owner, notAddedAdmin } =
+      const { userContract, owner, notAddedAdmin } =
         await loadFixture(deployFixture);
-      await marketplace
+
+      await userContract
         .connect(owner)
         .addNewAdmin(
           notAddedAdmin.address,
@@ -132,7 +118,7 @@ describe("Admin and User Management", () => {
         );
 
       await expect(
-        marketplace
+        userContract
           .connect(owner)
           .addNewAdmin(
             notAddedAdmin.address,
@@ -148,10 +134,10 @@ describe("Admin and User Management", () => {
 
   describe("User management", () => {
     it("should approve a registered user", async () => {
-      const { marketplace, admin1, admin2, user1 } =
+      const { userContract, admin1, admin2, user1 } =
         await loadFixture(deployFixture);
 
-      await marketplace
+      await userContract
         .connect(user1)
         .registerNewUser(
           "Sophie",
@@ -162,23 +148,23 @@ describe("Admin and User Management", () => {
         );
 
       expect(
-        await marketplace.connect(admin1).viewPendingUsers(),
+        await userContract.connect(admin1).viewPendingUsers(),
       ).to.deep.equal([user1.address]);
 
-      expect(await marketplace.connect(admin2).approveUser(user1.address))
-        .to.emit(marketplace, "ApproveUser")
+      expect(await userContract.connect(admin2).approveUser(user1.address))
+        .to.emit(userContract, "ApproveUser")
         .withArgs(admin2.address, user1.address);
 
       expect(
-        await marketplace.connect(admin1).viewPendingUsers(),
+        await userContract.connect(admin1).viewPendingUsers(),
       ).to.deep.equal([]);
     });
 
     it("should approve any user in pending users", async () => {
-      const { marketplace, admin1, user1, user2, user3 } =
+      const { userContract, admin1, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
-      await marketplace
+      await userContract
         .connect(user1)
         .registerNewUser(
           "Sophie",
@@ -187,7 +173,7 @@ describe("Admin and User Management", () => {
           "789-01-2345",
           "456 Oak Lane, London, UK",
         );
-      await marketplace
+      await userContract
         .connect(user2)
         .registerNewUser(
           "Muhammad",
@@ -196,7 +182,7 @@ describe("Admin and User Management", () => {
           "567-89-0123",
           "321 Cedar Road, Dhaka, Bangladesh",
         );
-      await marketplace
+      await userContract
         .connect(user3)
         .registerNewUser(
           "Elena",
@@ -207,30 +193,30 @@ describe("Admin and User Management", () => {
         );
 
       expect(
-        await marketplace.connect(admin1).viewPendingUsers(),
+        await userContract.connect(admin1).viewPendingUsers(),
       ).to.deep.equal([user1.address, user2.address, user3.address]);
 
-      await expect(marketplace.connect(admin1).approveUser(user2.address))
-        .to.emit(marketplace, "ApproveUser")
+      await expect(userContract.connect(admin1).approveUser(user2.address))
+        .to.emit(userContract, "ApproveUser")
         .withArgs(admin1.address, user2.address);
       expect(
-        await marketplace.connect(admin1).viewPendingUsers(),
+        await userContract.connect(admin1).viewPendingUsers(),
       ).to.deep.equal([user1.address, user3.address]);
     });
 
     it("should revert if no user in pending list to approve", async () => {
-      const { marketplace, admin1, user1 } = await loadFixture(deployFixture);
+      const { userContract, admin1, user1 } = await loadFixture(deployFixture);
 
       await expect(
-        marketplace.connect(admin1).approveUser(user1.address),
+        userContract.connect(admin1).approveUser(user1.address),
       ).to.be.revertedWith("No pending users to approve or reject");
     });
 
     it("should revert if user not found in pending list to approve", async () => {
-      const { marketplace, admin1, user1, user2 } =
+      const { userContract, admin1, user1, user2 } =
         await loadFixture(deployFixture);
 
-      await marketplace
+      await userContract
         .connect(user1)
         .registerNewUser(
           "Sophie",
@@ -240,14 +226,14 @@ describe("Admin and User Management", () => {
           "456 Oak Lane, London, UK",
         );
       await expect(
-        marketplace.connect(admin1).approveUser(user2.address),
+        userContract.connect(admin1).approveUser(user2.address),
       ).to.be.revertedWith("User not found in pending list, double check");
     });
 
     it("should reject a user and allow to register again to get approved", async () => {
-      const { marketplace, admin1, user1 } = await loadFixture(deployFixture);
+      const { userContract, admin1, user1 } = await loadFixture(deployFixture);
 
-      await marketplace
+      await userContract
         .connect(user1)
         .registerNewUser(
           "FakeFirstName",
@@ -257,15 +243,15 @@ describe("Admin and User Management", () => {
           "987 Fake Street, FakeCapital, FakeNation",
         );
       await expect(
-        marketplace.connect(admin1).rejectUser(user1.address, "no fake info"),
+        userContract.connect(admin1).rejectUser(user1.address, "no fake info"),
       )
-        .to.emit(marketplace, "RejectUser")
+        .to.emit(userContract, "RejectUser")
         .withArgs(admin1.address, user1.address, "no fake info");
       expect(
-        await marketplace.connect(admin1).viewPendingUsers(),
+        await userContract.connect(admin1).viewPendingUsers(),
       ).to.deep.equal([]);
 
-      await marketplace
+      await userContract
         .connect(user1)
         .registerNewUser(
           "Sophie",
@@ -274,8 +260,8 @@ describe("Admin and User Management", () => {
           "789-01-2345",
           "456 Oak Lane, London, UK",
         );
-      await expect(marketplace.connect(admin1).approveUser(user1.address))
-        .to.emit(marketplace, "ApproveUser")
+      await expect(userContract.connect(admin1).approveUser(user1.address))
+        .to.emit(userContract, "ApproveUser")
         .withArgs(admin1.address, user1.address);
     });
   });

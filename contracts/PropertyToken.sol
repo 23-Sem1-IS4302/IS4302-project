@@ -3,12 +3,15 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./User.sol";
 
 contract PropertyToken is ERC1155, Ownable {
-    constructor() ERC1155("PropertyToken") Ownable(msg.sender) {
+    constructor(address userContractAddr) ERC1155("PropertyToken") Ownable(msg.sender) {
+        userContract = User(userContractAddr);
         tokenId = 0;
     }
 
+    User userContract;
     uint256 tokenId;
 
     struct propertyDetail {
@@ -20,20 +23,50 @@ contract PropertyToken is ERC1155, Ownable {
     mapping(uint256 => propertyDetail) properties;
     mapping(uint256 => address[]) _propertyOwners;
     mapping(uint256 => uint256[]) _propertyShares;
+    uint256[] _pendingPropertyIds;
+
+    event RegisterNewProperty(address indexed userAddr, uint256 indexed propertyId);
+    event ApproveProperty(address indexed adminAddr, uint256 indexed propertyId);
+    event RejectProperty(address indexed adminAddr, uint256 indexed propertyId, string reason);
+
+    modifier onlyAdmin() {
+        require(userContract.isAddressAdmin(msg.sender), "Only administrators can access this function");
+        _;
+    }
+    modifier onlyApprovedUser() {
+        require(userContract.isAddressApprovedUser(msg.sender), "Only approved user can access this function");
+        _;
+    }
+    modifier havePendingProperties() {
+        require(_pendingPropertyIds.length != 0, "No pending properties to approve or reject");
+        _;
+    }
+    modifier validOwnersShares(address[] memory propertyOwners, uint256[] memory shares) {
+        require(propertyOwners.length == shares.length, "Owners and shares length do not match");
+        // TODO Do we need a limit? Cause if there are more than 1000 owners, then totalShares is also more than 1000
+        require(propertyOwners.length <= 1000, "At most 1000 owners allowed");
+
+        uint256 totalShares = 0;
+        for (uint256 i = 0; i < propertyOwners.length; i++) {
+            require(userContract.isAddressApprovedUser(propertyOwners[i]), "Some users are not approved");
+            totalShares += shares[i];
+        }
+        require(totalShares == 1000, "Shares sum is not 1000");
+        _;
+    }
 
     function registerNewProperty(
         string memory postalCode,
         string memory propertyAddress,
         address[] memory propertyOwners,
         uint256[] memory shares
-    ) public onlyOwner returns (uint256) {
+    ) public onlyApprovedUser validOwnersShares(propertyOwners, shares) {
         propertyDetail memory newProperty = propertyDetail(postalCode, propertyAddress, propertyOwners, shares);
         properties[tokenId] = newProperty;
-        _propertyOwners[tokenId] = propertyOwners;
-        _propertyShares[tokenId] = shares;
+        _pendingPropertyIds.push(tokenId);
 
+        emit RegisterNewProperty(msg.sender, tokenId);
         tokenId++;
-        return tokenId - 1;
     }
 
     function _isOwnerFoundInProperty(uint256 propertyId, address propertyOwner) private view returns (bool) {
@@ -69,15 +102,58 @@ contract PropertyToken is ERC1155, Ownable {
         _propertyShares[propertyId].pop();
     }
 
-    function mintPropertyToken(uint256 pendingPropertyId) public onlyOwner {
-        for (uint256 i = 0; i < _propertyOwners[pendingPropertyId].length; i++) {
-            _mint(_propertyOwners[pendingPropertyId][i], pendingPropertyId, _propertyShares[pendingPropertyId][i], "");
+    function _removePendingProperty(uint256 pendingPropertyId) private {
+        for (uint256 i = 0; i < _pendingPropertyIds.length; i++) {
+            if (_pendingPropertyIds[i] == pendingPropertyId) {
+                (_pendingPropertyIds[i], _pendingPropertyIds[_pendingPropertyIds.length - 1]) = (
+                    _pendingPropertyIds[_pendingPropertyIds.length - 1],
+                    _pendingPropertyIds[i]
+                );
+                break;
+            }
+        }
+
+        if (_pendingPropertyIds[_pendingPropertyIds.length - 1] == pendingPropertyId) {
+            _pendingPropertyIds.pop();
+        } else {
+            revert("Property ID not found in pending list, double check");
         }
     }
 
     function viewProperty(uint256 propertyId) public view returns (propertyDetail memory) {
         return properties[propertyId];
     }
+
+    function approveProperty(uint256 pendingPropertyId) public onlyAdmin havePendingProperties {
+        _removePendingProperty(pendingPropertyId);
+        propertyDetail memory propertyToMint = properties[pendingPropertyId];
+
+        for (uint256 i = 0; i < propertyToMint.propertyOwners.length; i++) {
+            _mint(propertyToMint.propertyOwners[i], pendingPropertyId, propertyToMint.shares[i], "");
+        }
+        _propertyOwners[pendingPropertyId] = propertyToMint.propertyOwners;
+        _propertyShares[pendingPropertyId] = propertyToMint.shares;
+
+        emit ApproveProperty(msg.sender, pendingPropertyId);
+    }
+
+    function rejectProperty(uint256 pendingPropertyId, string memory reason) public onlyAdmin havePendingProperties {
+        _removePendingProperty(pendingPropertyId);
+        emit RejectProperty(msg.sender, pendingPropertyId, reason);
+    }
+
+    function viewPendingProperties() public view onlyAdmin returns (uint256[] memory) {
+        return _pendingPropertyIds;
+    }
+
+    function isPropertyIdValid(uint256 propertyId) public view returns (bool) {
+        return _propertyOwners[propertyId].length != 0;
+    }
+
+    // TODO later
+    // function viewUserAllProperties(address userAddr) public pure returns (uint256) {
+    //     return 123;
+    // }
 
     function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes memory data) public override {
         require(from != to, "from address is same as to address");
@@ -118,8 +194,7 @@ contract PropertyToken is ERC1155, Ownable {
         uint256[] memory values,
         bytes memory data
     ) public override {
-        // if from has no balance left, remove it
-        // always adda to the to
+        require(from == address(0), "Err: this function is not supported at the moment");
         super.safeBatchTransferFrom(from, to, ids, values, data);
     }
 }
