@@ -58,7 +58,7 @@ describe("HDBTMarketPlace", function () {
       await market.connect(user1).listItem(1, ethers.parseEther("10"), 500);
       await market.connect(user1).cancelListing(1);
       await expect(
-        market.connect(user2).getListing(1, user1.address)
+        market.connect(user2).getListingPrice(1, user1.address)
       ).to.be.revertedWith("The listing does not exist");
     });
   });
