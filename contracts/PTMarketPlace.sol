@@ -11,12 +11,14 @@ import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 // allow buyers to get listing for a specific token, send offer, withdraw offer
 // record the history of transaction? proceeds (money obtained by seller)
 contract PTMarketPlace is Ownable, ReentrancyGuard {
+    uint constant WAIT_PERIOD = 7 days;
     struct Listing {
         uint256 quantity;
         uint256 price; // this is the initial price set by seller
         address seller;
         uint256 proceeds; // this is the price paid by actual buyer after accepting an offer
         address buyer;
+        uint curDealExpireAt; // after seller accepts the offer, buyer will need to make payment within 7 days, otherwise cancelled
         mapping(address => uint256) offers; //seller => offer price
     }
 
@@ -32,7 +34,7 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
     event ListingCanceled(address owner, uint256 tokenId);
     event OfferSent(address seller, uint256 tokenId, uint256 offer_price, address buyer);
     event OfferRetracted(address seller, uint256 tokenId, address buyer);
-    event OfferAccepted(address seller, uint256 tokenId, address buyer);
+    event OfferAccepted(address seller, uint256 tokenId, address buyer, uint expiryTime);
     event TokenSold(address seller, uint256 tokenId, address buyer);
 
     // constructor
@@ -86,7 +88,7 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
 
     modifier isNotBought(uint256 tokenId, address seller) {
         require(
-            listings_mapping[tokenId][seller].buyer == address(0),
+            block.timestamp > listings_mapping[tokenId][seller].curDealExpireAt,
             "This listing has a buyer and is in pending state"
         );
         _;
@@ -97,7 +99,11 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
         address seller,
         address buyer
     ) {
-        require(listings_mapping[tokenId][seller].buyer == buyer, "Only buyer can call this function");
+        require(
+            listings_mapping[tokenId][seller].buyer == buyer &&
+                listings_mapping[tokenId][seller].curDealExpireAt > block.timestamp,
+            "Only buyer can call this function"
+        );
         _;
     }
 
@@ -158,8 +164,8 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
         uint256 offer_price = listings_mapping[tokenId][msg.sender].offers[buyer];
         listings_mapping[tokenId][msg.sender].proceeds = offer_price;
         listings_mapping[tokenId][msg.sender].buyer = buyer;
-        emit OfferAccepted(msg.sender, tokenId, buyer);
-        //TODO: give 7 days
+        listings_mapping[tokenId][msg.sender].curDealExpireAt = block.timestamp + WAIT_PERIOD;
+        emit OfferAccepted(msg.sender, tokenId, buyer, block.timestamp + WAIT_PERIOD);
     }
 
     // Buyer will call this function to pay the proceeds
@@ -176,6 +182,5 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
         emit TokenSold(seller, tokenId, msg.sender);
         // delete listing and offers
         delete (listings_mapping[tokenId][seller]);
-        //TODO: delay before finalization
     }
 }
