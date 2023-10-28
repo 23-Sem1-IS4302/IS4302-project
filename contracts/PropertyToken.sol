@@ -25,6 +25,8 @@ contract PropertyToken is ERC1155, Ownable {
     mapping(uint256 => uint256[]) _propertyShares;
     uint256[] _pendingPropertyIds;
 
+    mapping(address => uint256[]) _userPropertyIds;
+
     event RegisterNewProperty(address indexed userAddr, uint256 indexed propertyId);
     event ApproveProperty(address indexed adminAddr, uint256 indexed propertyId);
     event RejectProperty(address indexed adminAddr, uint256 indexed propertyId, string reason);
@@ -43,7 +45,6 @@ contract PropertyToken is ERC1155, Ownable {
     }
     modifier validOwnersShares(address[] memory propertyOwners, uint256[] memory shares) {
         require(propertyOwners.length == shares.length, "Owners and shares length do not match");
-        // TODO Do we need a limit? Cause if there are more than 1000 owners, then totalShares is also more than 1000
         require(propertyOwners.length <= 1000, "At most 1000 owners allowed");
 
         uint256 totalShares = 0;
@@ -102,6 +103,26 @@ contract PropertyToken is ERC1155, Ownable {
         _propertyShares[propertyId].pop();
     }
 
+    function _getPropertyIdIndex(uint256 propertyId, address propertyOwner) private view returns (uint256) {
+        for (uint256 i = 0; i < _userPropertyIds[propertyOwner].length; i++) {
+            if (_userPropertyIds[propertyOwner][i] == propertyId) {
+                return i;
+            }
+        }
+
+        // this revert should never be reached
+        revert("dummy");
+    }
+
+    function _removePropertyIdFromOwner(uint256 propertyId, address propertyOwner) private {
+        uint256 index = _getPropertyIdIndex(propertyId, propertyOwner);
+
+        for (uint256 i = index; i < _userPropertyIds[propertyOwner].length - 1; i++) {
+            _userPropertyIds[propertyOwner][i] = _userPropertyIds[propertyOwner][i + 1];
+        }
+        _userPropertyIds[propertyOwner].pop();
+    }
+
     function _removePendingProperty(uint256 pendingPropertyId) private {
         for (uint256 i = 0; i < _pendingPropertyIds.length; i++) {
             if (_pendingPropertyIds[i] == pendingPropertyId) {
@@ -130,6 +151,8 @@ contract PropertyToken is ERC1155, Ownable {
 
         for (uint256 i = 0; i < propertyToMint.propertyOwners.length; i++) {
             _mint(propertyToMint.propertyOwners[i], pendingPropertyId, propertyToMint.shares[i], "");
+
+            _userPropertyIds[propertyToMint.propertyOwners[i]].push(pendingPropertyId);
         }
         _propertyOwners[pendingPropertyId] = propertyToMint.propertyOwners;
         _propertyShares[pendingPropertyId] = propertyToMint.shares;
@@ -150,28 +173,33 @@ contract PropertyToken is ERC1155, Ownable {
         return _propertyOwners[propertyId].length != 0;
     }
 
-    // TODO later
-    // function viewUserAllProperties(address userAddr) public pure returns (uint256) {
-    //     return 123;
-    // }
+    function viewUserProperties(address userAddr) public view returns (uint256[] memory) {
+        return _userPropertyIds[userAddr];
+    }
 
     function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes memory data) public override {
         require(from != to, "from address is same as to address");
         require(_isOwnerFoundInProperty(id, from), "from is not an owner");
 
-        // add "to" to the indexOfPropertyOwners if "to" is not part of owner
         if (!_isOwnerFoundInProperty(id, to)) {
+            // add "to" to the indexOfPropertyOwners if "to" is not part of owner
             _propertyOwners[id].push(to);
             _propertyShares[id].push(value);
+
+            // add this "id" to the owner's propertyIds
+            _userPropertyIds[to].push(id);
         } else {
             uint256 toIndex = _getOwnerIndex(id, to);
             _propertyShares[id][toIndex] = _propertyShares[id][toIndex] + value;
         }
-        // if from has 0 balance left after the transfer, remove it
         uint256 fromIndex = _getOwnerIndex(id, from);
         _propertyShares[id][fromIndex] = _propertyShares[id][fromIndex] - value;
         if (_propertyShares[id][fromIndex] == 0) {
+            // if "from" in property has 0 balance left after the transfer, remove it
             _removeOwnerAndShare(id, from);
+
+            // remove this "id" from _userPropertyIds["from"]
+            _removePropertyIdFromOwner(id, from);
         }
         // reconstruct the propertyDetail struct
         propertyDetail memory oldProperty = properties[id];
@@ -186,7 +214,6 @@ contract PropertyToken is ERC1155, Ownable {
         super.safeTransferFrom(from, to, id, value, data);
     }
 
-    // TODO might consider disable this function
     function safeBatchTransferFrom(
         address from,
         address to,
@@ -194,7 +221,7 @@ contract PropertyToken is ERC1155, Ownable {
         uint256[] memory values,
         bytes memory data
     ) public override {
-        require(from == address(0), "Err: this function is not supported at the moment");
+        require(msg.sender == address(0), "Err: this function is not supported at the moment");
         super.safeBatchTransferFrom(from, to, ids, values, data);
     }
 }

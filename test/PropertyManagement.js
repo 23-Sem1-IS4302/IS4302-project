@@ -43,9 +43,9 @@ function verifyPropertyOwnersShares(
 }
 
 describe("Property Management", () => {
-  const PROPERTY_ID_0 = 0;
-  const PROPERTY_ID_1 = 1;
-  const PROPERTY_ID_2 = 2;
+  const PROPERTY_ID_0 = BigInt(0);
+  const PROPERTY_ID_1 = BigInt(1);
+  const PROPERTY_ID_2 = BigInt(2);
   const ONE_THOUSAND_SHARES = 1000;
 
   async function deployFixture() {
@@ -148,6 +148,9 @@ describe("Property Management", () => {
       expect(
         await propertyToken.balanceOf(user1.address, PROPERTY_ID_0),
       ).to.equal(ONE_THOUSAND_SHARES);
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
     });
 
     it("should returns propertyId as valid only after approval", async () => {
@@ -315,6 +318,16 @@ describe("Property Management", () => {
       expect(
         await propertyToken.balanceOf(user3.address, PROPERTY_ID_0),
       ).to.equal(400);
+
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
     });
 
     it("should not register the property if owners and shares size are not equal", async () => {
@@ -438,6 +451,16 @@ describe("Property Management", () => {
         expectedOwners,
         expectedShares,
       );
+
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
     });
 
     it("should remove owner after transfer all shares", async () => {
@@ -473,6 +496,15 @@ describe("Property Management", () => {
         expectedOwners,
         expectedShares,
       );
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.deep.equal([]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
 
       await propertyToken
         .connect(user1)
@@ -494,6 +526,16 @@ describe("Property Management", () => {
         expectedOwners1,
         expectedShares1,
       );
+
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.deep.equal([]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.deep.equal([]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.deep.equal([PROPERTY_ID_0]);
     });
 
     it("should revert if owner starting the transfer not found in the property", async () => {
@@ -546,6 +588,235 @@ describe("Property Management", () => {
             "0x",
           ),
       ).to.be.revertedWithPanic();
+    });
+
+    it("should show owners, shares and properties correctly after multiple shares transfers", async () => {
+      const { propertyToken, admin1, user1, user2, user3 } =
+        await loadFixture(deployFixture);
+
+      await propertyToken
+        .connect(user1)
+        .registerNewProperty(
+          "573821",
+          "123 Main Street, Los Angeles, CA",
+          [user1.address, user2.address, user3.address],
+          [200, 300, 500],
+        );
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_0);
+      var [dummy1, dummy2, propertyOwners0, shares0] =
+        await propertyToken.viewProperty(PROPERTY_ID_0);
+      verifyPropertyOwnersShares(
+        propertyOwners0,
+        shares0,
+        [user1.address, user2.address, user3.address],
+        [200, 300, 500],
+      );
+      await propertyToken
+        .connect(user1)
+        .registerNewProperty(
+          "892467",
+          "321 Cedar Road, Dhaka, Bangladesh",
+          [user1.address, user2.address, user3.address],
+          [300, 400, 300],
+        );
+      await propertyToken.connect(admin1).approveProperty(PROPERTY_ID_1);
+      var [dummy1, dummy2, propertyOwners1, shares1] =
+        await propertyToken.viewProperty(PROPERTY_ID_1);
+      verifyPropertyOwnersShares(
+        propertyOwners1,
+        shares1,
+        [user1.address, user2.address, user3.address],
+        [300, 400, 300],
+      );
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+
+      // user3 transfer to user1 PROPERTY_ID_1 300
+      await propertyToken
+        .connect(user3)
+        .safeTransferFrom(
+          user3.address,
+          user1.address,
+          PROPERTY_ID_1,
+          300,
+          "0x",
+        );
+      var [dummy1, dummy2, propertyOwners0, shares0] =
+        await propertyToken.viewProperty(PROPERTY_ID_0);
+      verifyPropertyOwnersShares(
+        propertyOwners0,
+        shares0,
+        [user1.address, user2.address, user3.address],
+        [200, 300, 500],
+      );
+      var [dummy1, dummy2, propertyOwners1, shares1] =
+        await propertyToken.viewProperty(PROPERTY_ID_1);
+      verifyPropertyOwnersShares(
+        propertyOwners1,
+        shares1,
+        [user1.address, user2.address],
+        [600, 400],
+      );
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.include.members([PROPERTY_ID_0]);
+
+      // user2 transfer to user3 PROPERTY_ID_1 200
+      await propertyToken
+        .connect(user2)
+        .safeTransferFrom(
+          user2.address,
+          user3.address,
+          PROPERTY_ID_1,
+          200,
+          "0x",
+        );
+      var [dummy1, dummy2, propertyOwners0, shares0] =
+        await propertyToken.viewProperty(PROPERTY_ID_0);
+      verifyPropertyOwnersShares(
+        propertyOwners0,
+        shares0,
+        [user1.address, user2.address, user3.address],
+        [200, 300, 500],
+      );
+      var [dummy1, dummy2, propertyOwners1, shares1] =
+        await propertyToken.viewProperty(PROPERTY_ID_1);
+      verifyPropertyOwnersShares(
+        propertyOwners1,
+        shares1,
+        [user1.address, user2.address, user3.address],
+        [600, 200, 200],
+      );
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+
+      // user2 transfer to user3 PROPERTY_ID_0 300
+      await propertyToken
+        .connect(user2)
+        .safeTransferFrom(
+          user2.address,
+          user3.address,
+          PROPERTY_ID_0,
+          300,
+          "0x",
+        );
+      var [dummy1, dummy2, propertyOwners0, shares0] =
+        await propertyToken.viewProperty(PROPERTY_ID_0);
+      verifyPropertyOwnersShares(
+        propertyOwners0,
+        shares0,
+        [user1.address, user3.address],
+        [200, 800],
+      );
+      var [dummy1, dummy2, propertyOwners1, shares1] =
+        await propertyToken.viewProperty(PROPERTY_ID_1);
+      verifyPropertyOwnersShares(
+        propertyOwners1,
+        shares1,
+        [user1.address, user2.address, user3.address],
+        [600, 200, 200],
+      );
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.include.members([PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+
+      // user3 transfer to user1 PROPERTY_ID_0 100
+      await propertyToken
+        .connect(user3)
+        .safeTransferFrom(
+          user3.address,
+          user1.address,
+          PROPERTY_ID_0,
+          100,
+          "0x",
+        );
+      var [dummy1, dummy2, propertyOwners0, shares0] =
+        await propertyToken.viewProperty(PROPERTY_ID_0);
+      verifyPropertyOwnersShares(
+        propertyOwners0,
+        shares0,
+        [user1.address, user3.address],
+        [300, 700],
+      );
+      var [dummy1, dummy2, propertyOwners1, shares1] =
+        await propertyToken.viewProperty(PROPERTY_ID_1);
+      verifyPropertyOwnersShares(
+        propertyOwners1,
+        shares1,
+        [user1.address, user2.address, user3.address],
+        [600, 200, 200],
+      );
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.include.members([PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+
+      // user1 transfer to user2 PROPERTY_ID_1 100
+      await propertyToken
+        .connect(user1)
+        .safeTransferFrom(
+          user1.address,
+          user2.address,
+          PROPERTY_ID_1,
+          100,
+          "0x",
+        );
+      var [dummy1, dummy2, propertyOwners0, shares0] =
+        await propertyToken.viewProperty(PROPERTY_ID_0);
+      verifyPropertyOwnersShares(
+        propertyOwners0,
+        shares0,
+        [user1.address, user3.address],
+        [300, 700],
+      );
+      var [dummy1, dummy2, propertyOwners1, shares1] =
+        await propertyToken.viewProperty(PROPERTY_ID_1);
+      verifyPropertyOwnersShares(
+        propertyOwners1,
+        shares1,
+        [user1.address, user2.address, user3.address],
+        [500, 300, 200],
+      );
+      expect(
+        await propertyToken.viewUserProperties(user1.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user2.address),
+      ).to.include.members([PROPERTY_ID_1]);
+      expect(
+        await propertyToken.viewUserProperties(user3.address),
+      ).to.include.members([PROPERTY_ID_0, PROPERTY_ID_1]);
     });
   });
 });

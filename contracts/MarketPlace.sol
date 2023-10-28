@@ -18,7 +18,7 @@ import "./PropertyToken.sol";
 // So the total balance of total is not fixed after calling the _mint() function
 // hence _mint() should be called carefully
 
-// TODO 5. How to track all tokens that belong to a user. (extend `safeTransferFrom` and disable `safeBatchTransferFrom`)
+// 5. (Done) How to track all tokens that belong to a user. (extend `safeTransferFrom` and disable `safeBatchTransferFrom`)
 
 // 6. (Done) Given a propertyId, list all addresses and their shares.
 
