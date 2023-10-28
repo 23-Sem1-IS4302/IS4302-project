@@ -86,6 +86,8 @@ describe("Admin and User Management", () => {
       const { userContract, owner, notAddedAdmin } =
         await loadFixture(deployFixture);
 
+      const ADMIN = await userContract.ADMIN();
+
       expect(
         await userContract
           .connect(owner)
@@ -100,6 +102,11 @@ describe("Admin and User Management", () => {
       )
         .to.emit(userContract, "AddAdmin")
         .withArgs(owner.address, notAddedAdmin.address);
+
+      expect(await userContract.hasRole(ADMIN, notAddedAdmin.address)).to.be
+        .true;
+      expect(await userContract.isAddressAdmin(notAddedAdmin.address)).to.be
+        .true;
     });
 
     it("should not add new admin with the same address", async () => {
@@ -147,32 +154,28 @@ describe("Admin and User Management", () => {
           "456 Oak Lane, London, UK",
         );
 
-      expect(
-        await userContract.connect(admin1).viewPendingUsers(),
-      ).to.deep.equal([user1.address]);
-
       expect(await userContract.connect(admin2).approveUser(user1.address))
         .to.emit(userContract, "ApproveUser")
         .withArgs(admin2.address, user1.address);
-
-      expect(
-        await userContract.connect(admin1).viewPendingUsers(),
-      ).to.deep.equal([]);
     });
 
     it("should approve any user in pending users", async () => {
       const { userContract, admin1, user1, user2, user3 } =
         await loadFixture(deployFixture);
 
-      await userContract
-        .connect(user1)
-        .registerNewUser(
-          "Sophie",
-          "Smith",
-          "British",
-          "789-01-2345",
-          "456 Oak Lane, London, UK",
-        );
+      expect(
+        await userContract
+          .connect(user1)
+          .registerNewUser(
+            "Sophie",
+            "Smith",
+            "British",
+            "789-01-2345",
+            "456 Oak Lane, London, UK",
+          ),
+      )
+        .to.emit(userContract, "UserRegistration")
+        .withArgs(user1.address);
       await userContract
         .connect(user2)
         .registerNewUser(
@@ -192,27 +195,20 @@ describe("Admin and User Management", () => {
           "987 Birch Street, Moscow, Russia",
         );
 
-      expect(
-        await userContract.connect(admin1).viewPendingUsers(),
-      ).to.deep.equal([user1.address, user2.address, user3.address]);
-
       await expect(userContract.connect(admin1).approveUser(user2.address))
         .to.emit(userContract, "ApproveUser")
         .withArgs(admin1.address, user2.address);
-      expect(
-        await userContract.connect(admin1).viewPendingUsers(),
-      ).to.deep.equal([user1.address, user3.address]);
     });
 
-    it("should revert if no user in pending list to approve", async () => {
+    it("should revert if not a pending user to approve", async () => {
       const { userContract, admin1, user1 } = await loadFixture(deployFixture);
 
       await expect(
         userContract.connect(admin1).approveUser(user1.address),
-      ).to.be.revertedWith("No pending users to approve or reject");
+      ).to.be.revertedWith("Not a pending user");
     });
 
-    it("should revert if user not found in pending list to approve", async () => {
+    it("should revert if not a pending user to approve 2", async () => {
       const { userContract, admin1, user1, user2 } =
         await loadFixture(deployFixture);
 
@@ -227,7 +223,7 @@ describe("Admin and User Management", () => {
         );
       await expect(
         userContract.connect(admin1).approveUser(user2.address),
-      ).to.be.revertedWith("User not found in pending list, double check");
+      ).to.be.revertedWith("Not a pending user");
     });
 
     it("should reject a user and allow to register again to get approved", async () => {
@@ -247,9 +243,6 @@ describe("Admin and User Management", () => {
       )
         .to.emit(userContract, "RejectUser")
         .withArgs(admin1.address, user1.address, "no fake info");
-      expect(
-        await userContract.connect(admin1).viewPendingUsers(),
-      ).to.deep.equal([]);
 
       await userContract
         .connect(user1)
@@ -263,6 +256,72 @@ describe("Admin and User Management", () => {
       await expect(userContract.connect(admin1).approveUser(user1.address))
         .to.emit(userContract, "ApproveUser")
         .withArgs(admin1.address, user1.address);
+    });
+
+    it("should not allow user to register again if user is pending or approved", async () => {
+      const { userContract, admin1, user1 } = await loadFixture(deployFixture);
+
+      await userContract
+        .connect(user1)
+        .registerNewUser(
+          "Sophie",
+          "Smith",
+          "British",
+          "789-01-2345",
+          "456 Oak Lane, London, UK",
+        );
+      await expect(
+        userContract
+          .connect(user1)
+          .registerNewUser(
+            "Sophie",
+            "Smith",
+            "British",
+            "789-01-2345",
+            "456 Oak Lane, London, UK",
+          ),
+      ).to.be.revertedWith("No duplicate user allowed");
+
+      await userContract.connect(admin1).approveUser(user1.address);
+      await expect(
+        userContract
+          .connect(user1)
+          .registerNewUser(
+            "Sophie",
+            "Smith",
+            "British",
+            "789-01-2345",
+            "456 Oak Lane, London, UK",
+          ),
+      ).to.be.revertedWith("No duplicate user allowed");
+    });
+
+    it("should grant user correct roles as pending and approved", async () => {
+      const { userContract, admin1, user1 } = await loadFixture(deployFixture);
+      const PENDING_USER = await userContract.PENDING_USER();
+      const APPROVED_USER = await userContract.APPROVED_USER();
+
+      await userContract
+        .connect(user1)
+        .registerNewUser(
+          "Sophie",
+          "Smith",
+          "British",
+          "789-01-2345",
+          "456 Oak Lane, London, UK",
+        );
+      expect(await userContract.hasRole(PENDING_USER, user1.address)).to.be
+        .true;
+      expect(await userContract.hasRole(APPROVED_USER, user1.address)).to.be
+        .false;
+
+      await userContract.connect(admin1).approveUser(user1.address);
+      expect(await userContract.hasRole(PENDING_USER, user1.address)).to.be
+        .false;
+      expect(await userContract.hasRole(APPROVED_USER, user1.address)).to.be
+        .true;
+      expect(await userContract.isAddressApprovedUser(user1.address)).to.be
+        .true;
     });
   });
 });
