@@ -3,6 +3,7 @@ const {
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const {time} = require("@nomicfoundation/hardhat-network-helpers");
 
 describe("PTMarketPlace", function () {
   const PROPERTY_ID_0 = 0;
@@ -118,7 +119,70 @@ describe("PTMarketPlace", function () {
       const { userContract, propertyToken, market, owner, admin1, user1, user2 } =
         await loadFixture(deployMarketFixture);
       await market.connect(user1).listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
-      // TODO: continue from here
+      await expect(
+        market.connect(user2).sendOffer(PROPERTY_ID_0, user1.address, ethers.parseEther("11"))
+      )
+        .to.emit(market, "OfferSent")
+        .withArgs(user1.address, PROPERTY_ID_0, ethers.parseEther("11"), user2.address);
+      expect(await market.getOfferPrice(PROPERTY_ID_0, user1.address, user2.address)).to.be.equal(ethers.parseEther("11"));
+    });
+
+    it("offer price should be as high as initial price", async function () {
+      const { userContract, propertyToken, market, owner, admin1, user1, user2 } =
+        await loadFixture(deployMarketFixture);
+      await market.connect(user1).listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
+      await expect(
+        market.connect(user2).sendOffer(PROPERTY_ID_0, user1.address, ethers.parseEther("9"))
+      )
+      .to.be.revertedWith("Price offered is lower than listed price");
+    });
+
+    it("retract offer", async function () {
+      const { userContract, propertyToken, market, owner, admin1, user1, user2 } =
+        await loadFixture(deployMarketFixture);
+      await market.connect(user1).listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
+      await market.connect(user2).sendOffer(PROPERTY_ID_0, user1.address, ethers.parseEther("11"));
+      await market.connect(user2).retractOffer(PROPERTY_ID_0, user1.address);
+      await expect(
+        market.connect(user2).getOfferPrice(PROPERTY_ID_0, user1.address, user2.address)
+      ).to.be.revertedWith("The offer does not exist");
+    });
+  });
+
+  describe("accept offer and transaction of tokens bought", function () {
+  it("accept offer and make payment", async function () {
+      const { userContract, propertyToken, market, owner, admin1, user1, user2 } =
+        await loadFixture(deployMarketFixture);
+      await market.connect(user1).listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
+      await market.connect(user2).sendOffer(PROPERTY_ID_0, user1.address, ethers.parseEther("11"));
+      await market.connect(user1).acceptOffer(PROPERTY_ID_0, user2.address);
+      const marketAddr = await market.getAddress()
+      await propertyToken.connect(user1).setApprovalForAll(marketAddr, true)
+      expect(await market.connect(user2).executePropertySale(PROPERTY_ID_0, user1.address, {value: ethers.parseEther("11")}))
+      .to.changeEtherBalance(user2,ethers.parseEther("11"));
+      expect(await propertyToken.balanceOf(user2, PROPERTY_ID_0)).to.be.equal(500);
+    });
+  it("cannot unlist or send new offers once an offer is accepted (within 7 days)", async function () {
+      const { userContract, propertyToken, market, owner, admin1, user1, user2 } =
+        await loadFixture(deployMarketFixture);
+      await market.connect(user1).listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
+      await market.connect(user2).sendOffer(PROPERTY_ID_0, user1.address, ethers.parseEther("11"));
+      await market.connect(user1).acceptOffer(PROPERTY_ID_0, user2.address);
+      await expect(market.connect(user1).unlistProperty(PROPERTY_ID_0)).to.revertedWith("This listing has a buyer and is in pending state");
+      await expect(market.connect(user2).sendOffer(PROPERTY_ID_0, user1.address, ethers.parseEther("20")))
+      .to.revertedWith("This listing has a buyer and is in pending state");
+    });
+  it("Can no longer make payment if the deal expires after 7 days", async function () {
+      const { userContract, propertyToken, market, owner, admin1, user1, user2 } =
+        await loadFixture(deployMarketFixture);
+      await market.connect(user1).listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
+      await market.connect(user2).sendOffer(PROPERTY_ID_0, user1.address, ethers.parseEther("11"));
+      await market.connect(user1).acceptOffer(PROPERTY_ID_0, user2.address);
+      const marketAddr = await market.getAddress()
+      await propertyToken.connect(user1).setApprovalForAll(marketAddr, true)
+      await time.increase(3600*24*8);
+      await expect(market.connect(user2).executePropertySale(PROPERTY_ID_0, user1.address, {value: ethers.parseEther("11")}))
+      .to.revertedWith("Only buyer with non-expired deal can call this function")
     });
   });
 });
