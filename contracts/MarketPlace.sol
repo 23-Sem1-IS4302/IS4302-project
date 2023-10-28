@@ -35,11 +35,6 @@ contract Marketplace is Ownable {
     User userContract;
     PropertyToken propertyTokenContract;
 
-    modifier onlyApprovedUser() {
-        require(userContract.isAddressApprovedUser(msg.sender), "Only approved user can access this function");
-        _;
-    }
-
     // TODO later, or do we need it?
     // function viewUserStatus() public view {}
 
