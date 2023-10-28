@@ -79,10 +79,7 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
         address seller,
         address buyer
     ) {
-        require(
-            listings_mapping[tokenId][seller].offers[buyer] > 0,
-            "You do not have any existing offer for this token and seller"
-        );
+        require(listings_mapping[tokenId][seller].offers[buyer] > 0, "The offer does not exist");
         _;
     }
 
@@ -102,7 +99,7 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
         require(
             listings_mapping[tokenId][seller].buyer == buyer &&
                 listings_mapping[tokenId][seller].curDealExpireAt > block.timestamp,
-            "Only buyer can call this function"
+            "Only buyer with non-expired deal can call this function"
         );
         _;
     }
@@ -155,6 +152,14 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
         emit OfferRetracted(seller, tokenId, msg.sender);
     }
 
+    function getOfferPrice(
+        uint256 tokenId,
+        address seller,
+        address buyer
+    ) public view isListed(tokenId, seller) isOffered(tokenId, seller, buyer) returns (uint256) {
+        return listings_mapping[tokenId][seller].offers[buyer];
+    }
+
     // seller will call this function to accept an offer and buyer will have 7 days to pay
     // if the buyer does not pay the amount within 7 days, the deal shall be cancelled and sellers can choose from other offers
     function acceptOffer(
@@ -176,7 +181,7 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
         uint256 proceeds = listings_mapping[tokenId][seller].proceeds;
         uint256 quantity = listings_mapping[tokenId][seller].quantity;
         require(msg.value >= proceeds, "Ether paid should be equal or higher than the price");
-        PTContract.safeTransferFrom(seller, msg.sender, tokenId, quantity, "0x0");
+        PTContract.safeTransferFrom(seller, msg.sender, tokenId, quantity, "0x0"); // will need the seller to call setApprovalForAll(marketAddr, true)
         payable(msg.sender).transfer(msg.value - proceeds); // return extra ether paid
         payable(seller).transfer(proceeds - commission); // marketplace contract will keep the commission
         emit TokenSold(seller, tokenId, msg.sender);
