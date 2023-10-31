@@ -79,6 +79,7 @@ contract User is Ownable, AccessControl {
 
     function rejectUser(address userAddr, string memory reason) public onlyRole(ADMIN) onlyPendingUser(userAddr) {
         _revokeRole(PENDING_USER, userAddr);
+        delete users[userAddr];
         emit RejectUser(msg.sender, userAddr, reason);
     }
 

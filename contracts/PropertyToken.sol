@@ -162,6 +162,7 @@ contract PropertyToken is ERC1155, Ownable {
 
     function rejectProperty(uint256 pendingPropertyId, string memory reason) public onlyAdmin havePendingProperties {
         _removePendingProperty(pendingPropertyId);
+        delete properties[pendingPropertyId];
         emit RejectProperty(msg.sender, pendingPropertyId, reason);
     }
 
