@@ -177,7 +177,7 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
     function executePropertySale(
         uint256 tokenId,
         address seller
-    ) public payable isListed(tokenId, seller) onlyBuyer(tokenId, seller, msg.sender) {
+    ) public payable nonReentrant isListed(tokenId, seller) onlyBuyer(tokenId, seller, msg.sender) {
         uint256 proceeds = listings_mapping[tokenId][seller].proceeds;
         uint256 quantity = listings_mapping[tokenId][seller].quantity;
         require(msg.value >= proceeds, "Ether paid should be equal or higher than the price");
