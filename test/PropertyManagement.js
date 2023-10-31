@@ -267,6 +267,12 @@ describe("Property Management", () => {
       expect(
         await propertyToken.connect(admin1).viewPendingProperties(),
       ).to.deep.equal([PROPERTY_ID_0]);
+      const [posrtalCode, address, propertyOwners, shares] =
+        await propertyToken.viewProperty(PROPERTY_ID_0);
+      expect(posrtalCode).to.equal("573821");
+      expect(address).to.equal("123 Fake Street, Fake State, FA");
+      expect(propertyOwners).to.deep.equal([user1.address]);
+      expect(shares).to.deep.equal([ONE_THOUSAND_SHARES]);
 
       await expect(
         propertyToken
@@ -275,6 +281,12 @@ describe("Property Management", () => {
       )
         .to.emit(propertyToken, "RejectProperty")
         .withArgs(admin1.address, PROPERTY_ID_0, "no fake info");
+      const [posrtalCode1, address1, propertyOwners1, shares1] =
+        await propertyToken.viewProperty(PROPERTY_ID_0);
+      expect(posrtalCode1).to.equal("");
+      expect(address1).to.equal("");
+      expect(propertyOwners1).to.deep.equal([]);
+      expect(shares1).to.deep.equal([]);
 
       await propertyToken
         .connect(user1)
