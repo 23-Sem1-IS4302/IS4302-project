@@ -21,7 +21,6 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
         uint curDealExpireAt; // after seller accepts the offer, buyer will need to make payment within 7 days, otherwise cancelled
         mapping(address => uint256) offers; //seller => offer price
     }
-
     // State Variables
     User userContract;
     PropertyToken PTContract;
@@ -142,7 +141,6 @@ contract PTMarketPlace is Ownable, ReentrancyGuard {
         uint256 offer_price
     ) public onlyApprovedUser isListed(tokenId, seller) isNotBought(tokenId, seller) {
         require(msg.sender != seller, "You cannot make offer to your own listing!");
-        require(offer_price >= listings_mapping[tokenId][seller].price, "Price offered is lower than listed price");
         listings_mapping[tokenId][seller].offers[msg.sender] = offer_price;
         emit OfferSent(seller, tokenId, offer_price, msg.sender);
     }
