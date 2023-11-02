@@ -1,9 +1,9 @@
 const {
   loadFixture,
+  time,
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
 describe("PTMarketPlace", function () {
   const PROPERTY_ID_0 = 0;
@@ -81,15 +81,7 @@ describe("PTMarketPlace", function () {
   //userContract, propertyToken, market, owner, admin1, user1, user2
   describe("List token", function () {
     it("Item can be listed successfully", async function () {
-      const {
-        userContract,
-        propertyToken,
-        market,
-        owner,
-        admin1,
-        user1,
-        user2,
-      } = await loadFixture(deployMarketFixture);
+      const { market, user1 } = await loadFixture(deployMarketFixture);
       await expect(
         market
           .connect(user1)
@@ -100,15 +92,7 @@ describe("PTMarketPlace", function () {
     });
 
     it("Cannot list repeatedly", async function () {
-      const {
-        userContract,
-        propertyToken,
-        market,
-        owner,
-        admin1,
-        user1,
-        user2,
-      } = await loadFixture(deployMarketFixture);
+      const { market, user1 } = await loadFixture(deployMarketFixture);
       await market
         .connect(user1)
         .listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
@@ -120,15 +104,7 @@ describe("PTMarketPlace", function () {
     });
 
     it("Only owner with enough balance can list", async function () {
-      const {
-        userContract,
-        propertyToken,
-        market,
-        owner,
-        admin1,
-        user1,
-        user2,
-      } = await loadFixture(deployMarketFixture);
+      const { market, user2 } = await loadFixture(deployMarketFixture);
       await expect(
         market
           .connect(user2)
@@ -137,15 +113,7 @@ describe("PTMarketPlace", function () {
     });
 
     it("Cancel listing", async function () {
-      const {
-        userContract,
-        propertyToken,
-        market,
-        owner,
-        admin1,
-        user1,
-        user2,
-      } = await loadFixture(deployMarketFixture);
+      const { market, user1, user2 } = await loadFixture(deployMarketFixture);
       await market
         .connect(user1)
         .listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
@@ -157,15 +125,7 @@ describe("PTMarketPlace", function () {
   });
   describe("Buyer offer", function () {
     it("send offer", async function () {
-      const {
-        userContract,
-        propertyToken,
-        market,
-        owner,
-        admin1,
-        user1,
-        user2,
-      } = await loadFixture(deployMarketFixture);
+      const { market, user1, user2 } = await loadFixture(deployMarketFixture);
       await market
         .connect(user1)
         .listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
@@ -197,15 +157,7 @@ describe("PTMarketPlace", function () {
     // });
 
     it("retract offer", async function () {
-      const {
-        userContract,
-        propertyToken,
-        market,
-        owner,
-        admin1,
-        user1,
-        user2,
-      } = await loadFixture(deployMarketFixture);
+      const { market, user1, user2 } = await loadFixture(deployMarketFixture);
       await market
         .connect(user1)
         .listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
@@ -223,15 +175,8 @@ describe("PTMarketPlace", function () {
 
   describe("accept offer and transaction of tokens bought", function () {
     it("accept offer and make payment", async function () {
-      const {
-        userContract,
-        propertyToken,
-        market,
-        owner,
-        admin1,
-        user1,
-        user2,
-      } = await loadFixture(deployMarketFixture);
+      const { propertyToken, market, user1, user2 } =
+        await loadFixture(deployMarketFixture);
       await market
         .connect(user1)
         .listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
@@ -253,15 +198,7 @@ describe("PTMarketPlace", function () {
       );
     });
     it("cannot unlist or send new offers once an offer is accepted (within 7 days)", async function () {
-      const {
-        userContract,
-        propertyToken,
-        market,
-        owner,
-        admin1,
-        user1,
-        user2,
-      } = await loadFixture(deployMarketFixture);
+      const { market, user1, user2 } = await loadFixture(deployMarketFixture);
       await market
         .connect(user1)
         .listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
@@ -279,15 +216,8 @@ describe("PTMarketPlace", function () {
       ).to.revertedWith("This listing has a buyer and is in pending state");
     });
     it("Can no longer make payment if the deal expires after 7 days", async function () {
-      const {
-        userContract,
-        propertyToken,
-        market,
-        owner,
-        admin1,
-        user1,
-        user2,
-      } = await loadFixture(deployMarketFixture);
+      const { propertyToken, market, user1, user2 } =
+        await loadFixture(deployMarketFixture);
       await market
         .connect(user1)
         .listProperty(PROPERTY_ID_0, ethers.parseEther("10"), 500);
