@@ -27,10 +27,11 @@ describe("Admin and User Management", () => {
       await PropertyToken.connect(owner).deploy(userContractAddr);
     const propertyTokenAddr = await propertyToken.getAddress();
 
-    const Marketplace = await ethers.getContractFactory("Marketplace");
+    const Marketplace = await ethers.getContractFactory("PTMarketPlace");
     const marketplace = await Marketplace.connect(owner).deploy(
       userContractAddr,
       propertyTokenAddr,
+      ethers.parseEther("0.01"),
     );
 
     await userContract
